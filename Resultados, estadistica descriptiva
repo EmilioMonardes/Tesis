@@ -1,0 +1,1186 @@
+######################## Codigo de Tesis ##########################
+
+##################### Librerias #####################
+
+library(npSPC) # Cartas de COntrol No Parametricas
+library(plotly) # Graficos
+library(readxl) # Leer excel
+library(GGally)
+library(moments) # skewness
+library(e1071) # Kurtosis
+library(car) #qqPlot
+#library(remotes)
+#remotes::install_github('CER-UFBA/npSPC')
+library(npSPC)
+
+#######################################################
+# Leer el archivo
+ruta_archivo <- file.choose()
+Hidroc <- read_excel(ruta_archivo)
+names(Hidroc)
+##################### Tabla #########################
+head(Hidroc)
+
+#######################################################
+################## Estadistica descriptiva ############
+
+# Minimo
+min(Hidroc$Acum..Pasante)
+min(Hidroc$SIZE)
+min(log(Hidroc$SIZE))
+
+# Maximo
+max(Hidroc$Acum..Pasante)
+max(Hidroc$SIZE)
+max(log(Hidroc$SIZE))
+
+# Media
+mean(Hidroc$Acum..Pasante)
+mean(Hidroc$SIZE)
+mean(log(Hidroc$SIZE))
+
+# Media Geometrica
+media_geometrica <- function(numeros){return(prod(numeros)^(1/length(numeros)))}
+media.geo<-function(pesos) {exp(sum(log(pesos))/length(pesos))}
+media.geo(Hidroc$SIZE)
+media_geometrica(log(Hidroc$SIZE))
+
+# Mediana
+median(Hidroc$Acum..Pasante)
+median(Hidroc$SIZE)
+median(log(Hidroc$SIZE))
+
+# Desviacion estandar
+sd(Hidroc$Acum..Pasante)
+sd(Hidroc$SIZE)
+sd(log(Hidroc$SIZE))
+
+# Rango Intercuartilico
+quantile(x = Hidroc$Acum..Pasante, probs = c(0.25, 0.75))
+quantile(x = Hidroc$SIZE, probs = c(0.25, 0.75))
+quantile(x = log(Hidroc$SIZE), probs = c(0.25, 0.75))
+
+# Skewness
+
+skewness(Hidroc$Acum..Pasante)
+skewness(Hidroc$SIZE)
+skewness(log(Hidroc$SIZE))
+
+# Kurtosis
+
+kurtosis(Hidroc$Acum..Pasante)
+kurtosis(Hidroc$SIZE)
+kurtosis(log(Hidroc$SIZE))
+
+# Correlacion de Pearson
+
+cor(Hidroc$Acum..Pasante,Hidroc$SIZE,
+    method = "pearson")
+cor(Hidroc$Acum..Pasante,log(Hidroc$SIZE),
+    method = "pearson")
+
+# Correlación de Spearman
+
+cor(Hidroc$Acum..Pasante,Hidroc$SIZE,
+    method = "spearman")
+
+# Correlación de Kendall
+
+cor(Hidroc$Acum..Pasante,Hidroc$SIZE,
+    method = "kendall")
+
+##  Figura 5.1
+
+Hidroc$ID=as.factor(Hidroc$ID)
+p1=ggplot(Hidroc,aes(x=SIZE,y=Acum..Pasante,group=ID))+
+    geom_line(aes(color=ID)) + xlab(
+        expression(paste("Granularidad (",mu,"m)"))) + 
+    ylab("Acumulado Pasante")+ theme(legend.position="none")
+
+p2=ggplot(Hidroc,aes(x=log(SIZE),y=Acum..Pasante,group=ID))+
+    geom_line(aes(color=ID)) + xlab(
+        expression(paste("Granularidad [log(",mu,"m)]"))) + 
+    ylab("")
+
+cowplot::plot_grid(p1,p2)
+
+######################
+
+GGally::ggpairs(Hidroc[,c("SIZE","Acum..Pasante")])
+
+# Estimacion de parametros de la logistica
+
+############################################################
+llike.L3 <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    
+    sigma <- param[3]
+    mu <- 100/(1+ exp(-beta0*(SIZE- beta1)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+
+
+## TWO-GROUPS (G1 - 4,5,6,8 and G2 - cc)
+a1=Hidroc[Hidroc$ID!=4 & Hidroc$ID!=5 & Hidroc$ID!=6 & Hidroc$ID!=8,]
+plot(log(a1$SIZE),a1$Acum..Pasante)
+
+a2=Hidroc[Hidroc$ID==4 | Hidroc$ID==5 | Hidroc$ID==6 | Hidroc$ID==8,]
+plot(log(a2$SIZE),a2$Acum..Pasante)
+
+# Usa valores iniciales razonables para mu y sigma
+initial3_params <- c(1.543927, 2.353445, 1)
+# Optimiza la log-verosimilitud (G1)
+result3nolineal <- optim(initial3_params, llike.L3, method = "SANN",
+                         y = Hidroc$Acum..Pasante, SIZE = log(Hidroc$SIZE))
+print(result3nolineal)
+coeficientes3 <- result3nolineal$par
+coeficientes3
+
+
+# Figura 5.2
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad")
+indexNO <- seq(min(log(Hidroc$SIZE)),max(log(Hidroc$SIZE)),length.out=100)
+yhatNO <- 100/(1+exp(-coeficientes3[1]*(indexNO- coeficientes3[2])))
+lines(indexNO, yhatNO, col = "red", lwd = 2)
+coeficientes3
+
+# Calculo de residuales
+yhat <- 100/(1+exp(-coeficientes3[1]*(log(Hidroc$SIZE)- coeficientes3[2])))
+plot(log(Hidroc$SIZE),yhat,ylab="Acumulado Pasante",xlab="Granularidad")
+
+
+
+Hidroc$residualdeloptim <- Hidroc$Acum..Pasante - yhat
+# Promedio
+mean(Hidroc$residualdeloptim)
+# Skewness
+skewness(Hidroc$residualdeloptim)
+# Durbin-Watson
+residuals <- Hidroc$residualdeloptim
+n <- length(residuals)
+dw <- sum((residuals[-1] - residuals[-n])^2) / sum(residuals^2)
+print(dw)
+# QQ-plot
+library(car)
+qqPlot(Hidroc$residualdeloptim)
+
+
+# Shapiro-Wilk
+shapiro.test(Hidroc$residualdeloptim)
+
+##########################################
+# Cleaning Dataset
+ss=Hidroc[Hidroc$SIZE>0.7 & Hidroc$SIZE<631,]
+
+
+require(ggplot2)
+p11=ggplot(ss, aes(x=residualdeloptim)) + geom_histogram() + coord_flip() + 
+    scale_y_reverse()  + theme(
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+p12=ggplot(ss,aes(x=as.factor(SIZE),y=residualdeloptim)) + 
+    geom_violin(alpha=0.6) + xlab("Sample (unit)") + 
+    ylab("Diff(Observed Sample, Estimated Model)") +
+    stat_summary(fun = "median",col="red")+ 
+    stat_summary(fun = "mean", col="blue")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+cowplot::plot_grid(p11,p12,rel_heights = c(2,1),
+                   rel_widths = c(1, 3))
+
+
+########################## Interpolacion #############################
+
+# Lineal
+
+# Logaritmica
+
+# Directa del modelo
+
+
+
+#################### Residual del Modelo via CEP ####################
+
+library(data.table)
+setDT(ss)
+DB1=dcast(ss, SIZE ~ ID, value.var = "residualdeloptim")[,-1]
+
+##--PARAMETRIC SPC--
+require(qcc)
+qcc.options(bg.margin = "white")
+
+# Shewhart's (X-Bar and Range)
+XbarChart = qcc(DB1, type = "xbar", center=0)
+RChart = qcc(DB1, type = "R")
+# CuSUM
+CuSumChart <- cusum(DB1)
+summary(CuSumChart)
+# EWMA
+EWMAChart <- ewma(DB1, lambda=0.2, nsigmas=3)
+summary(EWMAChart)
+
+##--NONPARAMETRIC SPC--
+library(plotly)
+require(npSPC)
+shewhart_sr(DB1, group_by_col = TRUE, mu0 = 0, exact = TRUE)
+cusum_sn(DB1, group_by_col = TRUE, 
+         k = shapiro.test(as.matrix(DB1))$statistic/2, h = 50)
+
+ewma_sn(DB1, group_by_col = TRUE, 
+        lambda = shapiro.test(as.matrix(DB1))$statistic/2, L = 2.472)
+
+######################## Ggplot #######################
+
+########################################################################
+ss=Hidroc[Hidroc$SIZE<75,]
+names(ss)
+
+ggplot(ss,aes(y=Acum..Pasante,x=SIZE,color=as.factor(ID) )) + 
+    geom_point() + geom_smooth(method="gam")
+
+ss %>% filter(ID!=1) %>% 
+    ggplot(aes(y=Acum..Pasante,x=SIZE,color=as.factor(PRESION) )) + 
+    geom_point() + geom_smooth(method="gam")
+
+ss %>% filter(ID!=1) %>% 
+    ggplot(aes(y=Acum..Pasante,x=SIZE,color=as.factor(APEX) )) + 
+    geom_point() + geom_smooth(method="gam")
+
+ss %>% filter(ID!=1) %>% 
+    ggplot(aes(y=Acum..Pasante,x=SIZE,color=as.factor(SOLIDO) )) + 
+    geom_point() + geom_smooth(method="gam")
+
+
+library(tidyverse)
+ss_new <- ss %>% mutate(presion_tipo= case_when(PRESION==2 ~'A', 
+                                                PRESION==3 ~'A',
+                                                PRESION==4.4 ~'A',
+                                                PRESION==1.6 ~'B',
+                                                PRESION==7.6 ~'B'
+)) 
+
+
+ss_new %>% filter(ID!=1) %>% 
+    ggplot(aes(y=Acum..Pasante,x=SIZE,color=as.factor(presion_tipo) )) + 
+    geom_point() 
+
+############################### ANOVA ###########################
+
+ss_new$Acum..Pasante[ss_new$Acum..Pasante==0]=0.0001
+ss_new$logit=log(ss_new$Acum..Pasante/100)-log(1-(ss_new$Acum..Pasante/100))
+
+# Plot
+y=log((ss$Acum..Pasante)/(100-ss$Acum..Pasante))
+plot(log(ss$SIZE),y )
+
+# modelo lineal
+lm(logit ~ log(SIZE) * presion_tipo + SOLIDO + APEX, data=ss_new)
+summary(fit)
+# Anova
+ss_new$APEX=as.factor(ss_new$APEX)
+ss_new$SOLIDO=as.factor(ss_new$SOLIDO)
+fit=lm(logit ~ log(SIZE) + presion_tipo + SOLIDO + APEX, data=ss_new)
+summary(aov(fit))
+
+
+############################## Residuo logistica #####################
+
+plot(Hidroc$residualdeloptim, type = "line")
+
+acf(Hidroc$residualdeloptim)
+pacf(Hidroc$residualdeloptim)
+
+############################ Agregar filtro ARIMA ###################
+
+library(forecast)
+
+auto.arima(Hidroc$residualdeloptim)
+
+plot(residuals(auto.arima(Hidroc$residualdeloptim)))
+
+pacf(residuals(auto.arima(Hidroc$residualdeloptim)))
+
+# Revisar
+hist(residuals(auto.arima(Hidroc$residualdeloptim)), breaks=1000)
+lines(dnorm(mean(residuals(auto.arima(Hidroc$residualdeloptim))), sd(residuals(auto.arima(Hidroc$residualdeloptim))))
+      )
+
+
+################################## 17 Modelos ########################
+
+#gaudin -schuhmann
+
+set.seed(123456)
+llike.gaudin_schuhmann <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    sigma <- param[3]
+    mu <-  100*(SIZE/beta0)^beta1
+    #    mu <- 100*(SIZE/beta0)^beta1
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_gaudin_schuhmann <- c(15, 1,1)
+# Optimiza la log-verosimilitud (G1)
+result_gaudin_schuhmann <- optim(initial_gaudin_schuhmann, llike.gaudin_schuhmann, method = "SANN",
+                                 y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_gaudin_schuhmann)
+coeficientes <- result_gaudin_schuhmann$par
+
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Gaudin-Schuhmann")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=1000)
+yhat_gaudin_schuhmann <- 100*(indexNO/result_gaudin_schuhmann$par[1])^result_gaudin_schuhmann$par[2]
+lines(log(indexNO), yhat_gaudin_schuhmann, col = "red", lwd = 2)
+
+#verosimilitud
+llike.gaudin_schuhmann(result_gaudin_schuhmann$par,y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+
+result_gaudin_schuhmann$value
+
+
+####### Rossin rammler
+set.seed(123456)
+llike.rossin_rammler <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    sigma <- param[3]
+    mu <- 100*(1-exp(-(SIZE/beta0)^beta1))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+
+# Usa valores iniciales razonables para mu y sigma
+initial_rossin_rammler <- c(10, 20, 2)
+# Optimiza la log-verosimilitud (G1)
+result_rossin_rammler <- optim(initial_rossin_rammler, llike.rossin_rammler, method = "SANN",
+                               y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_rossin_rammler)
+coeficientes <- result_rossin_rammler$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Rossin-Rammler")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=1000)
+yhat_rossin_rammler <- 100*(1-exp(-(indexNO/result_rossin_rammler$par[1])^result_rossin_rammler$par[2]))
+lines(log(indexNO), yhat_rossin_rammler, col = "red", lwd = 2)
+
+
+#verosimilitud
+llike.rossin_rammler(result_rossin_rammler$par, y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+
+result_rossin_rammler$value
+
+#modelo  Swebrec
+set.seed(123456)
+llike_swebrec <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    sigma <- param[3]
+    mu <-  100/(1+(log(max(SIZE)/SIZE)/log(max(SIZE)/beta1))^beta0)
+    #    mu <- 100*(SIZE/beta0)^beta1
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_swebrec <- c(15, 1,1)
+# Optimiza la log-verosimilitud (G1)
+result_swebrec <- optim(initial_swebrec, llike_swebrec, method = "SANN",
+                        y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_swebrec)
+coeficientes3 <- result_swebrec$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Swebrec")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=1000)
+#yhatNO <- 100*(indexNO/coeficientes3[1])^coeficientes3[2]
+yhat_swebrec <- 100/(1+(log(max(indexNO)/indexNO)/log(max(indexNO)/result_swebrec$par[2]))^result_swebrec$par[1])
+lines(log(indexNO), yhat_swebrec, col = "red", lwd = 2)
+
+
+#verosimilitud
+llike_swebrec(result_swebrec$par,y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+result_swebrec$value
+
+#gompertz
+set.seed(123456)
+llike_Lgompertz <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    sigma <- param[3]
+    mu <-  100*exp(-exp(-beta0*(SIZE-beta1)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_Lgompertz <- c(0, 9, 1)
+# Optimiza la log-verosimilitud (G1)
+result_Lgompertz <- optim(initial_Lgompertz, llike_Lgompertz, method = "SANN",
+                          y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_Lgompertz)
+coeficientes3 <- result_Lgompertz$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "gompertz")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=1000)
+
+yhatNO_lgompertz <- 100*exp(-exp(-result_Lgompertz$par[1]*(indexNO-result_Lgompertz$par[2])))
+lines(log(indexNO), yhatNO_lgompertz, col = "red", lwd = 2)
+
+# verosimilitud
+llike_Lgompertz(result_Lgompertz$par,y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+result_Lgompertz$value
+
+############weibull
+
+
+plot(Hidroc$SIZE,Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "gompertz",xlim = c(0,5), ylim=c(0,20))
+# para obtener el p0.002
+set.seed(123456)
+llike.Lweibull <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- 100-(100-beta0)*exp(-(beta1*SIZE)^beta2)
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_Lweibull <- c(15, 1, 1, 7)
+# Optimiza la log-verosimilitud (G1)
+result_Lweibull <- optim(initial_Lweibull, llike.Lweibull, method = "SANN",
+                         y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_Lweibull)
+coeficientes3 <- result_Lweibull$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "weibull")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+#yhatNO <- 100*(indexNO/coeficientes3[1])^coeficientes3[2]
+yhatNO_Lweibull <- 100-(100-result_Lweibull$par[1])*exp(-(result_Lweibull$par[2]*indexNO)^result_Lweibull$par[3])
+lines(log(indexNO), yhatNO_Lweibull, col = "red", lwd = 2)
+
+
+# verosimilitud
+
+result_Lweibull$value
+
+# Modelo bass
+set.seed(123456)
+llike.bass <- function(param, y, SIZE) {
+    beta0 <- 100
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- beta0*((1-exp(-(beta1+beta2)*SIZE))/(1+ beta2/beta1*exp(-(beta1+beta2)*SIZE)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_bass <- c(100, 0, 0, 1)
+# Optimiza la log-verosimilitud (G1)
+result_bass <- optim(initial_bass, llike.bass, method = "SANN",
+                     y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_bass)
+coeficientes3 <- result_bass$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Bass")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_bass <- result_bass$par[1]*((1-exp(-(result_bass$par[2]+result_bass$par[3])*indexNO))/(1+ result_bass$par[3]/result_bass$par[2]*exp(-(result_bass$par[2]+result_bass$par[3])*indexNO)))
+lines(log(indexNO), yhatNO_bass, col = "red", lwd = 2)
+
+
+
+line_data <- data.frame(indexNO = indexNO, yhatNO_bass = yhatNO_bass)
+
+# Crear el gráfico con ggplot2
+ggplot(Hidroc, aes(x = log(SIZE), y = Acum..Pasante)) +
+    geom_point() +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_bass), color = "red", size = 1) +
+    labs(x = "Granularidad", y = "Acumulado Pasante", title = "Bass") +
+    theme_minimal()
+
+# verosimilitud
+
+result_bass$value
+
+
+#vector x
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+
+#vectores de y
+yhatNO_Lweibull <- 100-(100-result_Lweibull$par[1])*exp(-(result_Lweibull$par[2]*indexNO)^result_Lweibull$par[3])
+yhatNO_lgompertz <- 100*exp(-exp(-result_Lgompertz$par[1]*(indexNO-result_Lgompertz$par[2])))
+yhat_swebrec <- 100/(1+(log(max(indexNO)/indexNO)/log(max(indexNO)/result_swebrec$par[2]))^result_swebrec$par[1])
+yhat_rossin_rammler <- 100*(1-exp(-(indexNO/result_rossin_rammler$par[1])^result_rossin_rammler$par[2]))
+yhat_gaudin_schuhmann <- 100*(indexNO/result_gaudin_schuhmann$par[1])^result_gaudin_schuhmann$par[2]
+
+
+# grafico
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante", xlab = expression( paste("Granulometría [log(",mu,"m)]") ), main = "Ajuste de modelos", ylim = c(0,101))
+lines(log(indexNO), yhatNO_Lweibull, col = "red", lwd = 3)
+lines(log(indexNO), yhatNO_lgompertz, col = "blue", lwd = 3)
+lines(log(indexNO), yhat_swebrec, col = "green", lwd = 3)
+lines(log(indexNO), yhat_gaudin_schuhmann, col = "yellow", lwd = 3)
+lines(log(indexNO), yhat_rossin_rammler, col = "purple", lwd = 3)
+lines(log(indexNO), yhatNO_bass, col = "gray", lwd = 3)
+
+legend("bottomright", 
+       legend = c("Modelo Weibull", "Modelo Gompertz", "Modelo Swebrec", "Modelo Gaudin-Schuhmann", "Modelo Rossin-Rammler", "Modelo Bass"),
+       col = c("red", "blue", "green", "yellow", "purple", "gray"),
+       lwd = 3,
+       bty = "n")
+
+
+line_data1 <- data.frame(indexNO = indexNO, yhatNO_bass = yhatNO_bass)
+line_data2 <- data.frame(indexNO = indexNO, yhatNO_bass = yhatNO_bass)
+
+lines(log(indexNO), yhatNO_Lweibull, col = "red", lwd = 3)
+lines(log(indexNO), yhatNO_lgompertz, col = "blue", lwd = 3)
+lines(log(indexNO), yhat_swebrec, col = "green", lwd = 3)
+lines(log(indexNO), yhat_gaudin_schuhmann, col = "yellow", lwd = 3)
+lines(log(indexNO), yhat_rossin_rammler, col = "purple", lwd = 3)
+lines(log(indexNO), yhatNO_bass, col = "gray", lwd = 3)
+
+
+
+# Crear el gráfico con ggplot2
+ggplot(Hidroc, aes(x = log(SIZE), y = Acum..Pasante)) +
+    geom_point(aes(color = factor("Datos", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass")))) +
+    geom_line(data = line_data1, aes(x = log(indexNO), y = yhatNO_Lweibull, color = factor("Weibull", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_lgompertz, color = factor("Gompertz", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhat_swebrec, color = factor("Swebrec", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhat_gaudin_schuhmann, color = factor("Gaudin Schuhmann", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhat_rossin_rammler, color = factor("Rosin Rammler", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_bass, color = factor("Bass", levels = c("Datos", "Weibull", "Gompertz", "Swebrec", "Gaudin Schuhmann", "Rosin Rammler", "Bass"))), size = 1.5) +
+    
+    labs(x = "Granulometría", y = "Acumulado Pasante", title = "Ajuste de los modelos") +
+    ylim(0, 100) +
+    scale_color_manual(name = "Leyenda",
+                       values = c("Datos" = "black",
+                                  "Bass" = "gray",
+                                  "Gaudin Schuhmann" = "yellow",
+                                  "Gompertz" = "blue",
+                                  "Rosin Rammler" = "purple",
+                                  "Swebrec" = "green",
+                                  "Weibull" = "red")) +
+    theme_minimal()
+
+
+######################### Richards
+set.seed(123456)
+llike.richards <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- 100*(1+(beta0-1)*(exp(-beta1*(SIZE-beta2))))^(1/(1-beta0))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_richards <- c(15, 1, 10, 7)
+# Optimiza la log-verosimilitud (G1)
+result_richards <- optim(initial_richards, llike.richards, method = "SANN",
+                         y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_richards)
+coeficientes3 <- result_richards$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "richards")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+
+yhatNO_richards <- 100*(1+(result_richards$par[1]-1)*(exp(-result_richards$par[2]*(indexNO-result_richards$par[3]))))^(1/(1-result_richards$par[1]))
+lines(log(indexNO), yhatNO_richards, col = "red", lwd = 2)
+
+# verosimilitud
+result_richards$value
+
+################### Morgan et al
+set.seed(123456)
+llike.morganetal <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- 100-((100-beta0)/(1+(beta1*SIZE)^beta2))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_morganetal <- c(15, 1, 1, 7)
+# Optimiza la log-verosimilitud (G1)
+result_morganetal <- optim(initial_morganetal, llike.morganetal, method = "SANN",
+                           y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_morganetal)
+coeficientes3 <- result_morganetal$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "weibull")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+
+yhatNO_morganetal <- 100-((100-result_morganetal$par[1])/(1+(result_morganetal$par[2]*indexNO)^result_morganetal$par[3]))
+lines(log(indexNO), yhatNO_morganetal, col = "red", lwd = 2)
+
+# verosimilitud
+result_morganetal$value
+
+
+######################### Havercamp
+set.seed(123456)
+llike.havercamp <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- 100/(1+(beta0/SIZE)^beta1)^beta2
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_havercamp <- c(15, 1, 1, 7)
+# Optimiza la log-verosimilitud (G1)
+result_havercamp <- optim(initial_havercamp, llike.havercamp, method = "SANN",
+                          y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_havercamp)
+coeficientes3 <- result_havercamp$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "havercamp")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+
+yhatNO_havercamp <- 100/(1+(result_havercamp$par[1]/indexNO)^result_havercamp$par[2])^result_havercamp$par[3]
+lines(log(indexNO), yhatNO_havercamp, col = "red", lwd = 2)
+
+# verosimilitud
+result_havercamp$value
+
+
+
+######################### fredlund 
+set.seed(123456)
+llike.fredlund <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    first_part <- (100/(log(exp(1)+(((beta0/SIZE)^beta1)^beta2))))
+    second_part <- (1-(log(1+min(SIZE)/SIZE)/log(1+min(SIZE)/0.00001))^7)
+    mu <- first_part * second_part
+    
+    #    mu <- (100/(log(exp(1)+(((beta0/SIZE)^beta1)^beta2))))(1-(log(1+min(SIZE)/SIZE)/log(1+min(SIZE)/SIZE))^7)
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_fredlund <- c(15, 1, 1, 7)
+# Optimiza la log-verosimilitud (G1)
+result_fredlund <- optim(initial_fredlund, llike.fredlund, method = "SANN",
+                         y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_fredlund)
+coeficientes3 <- result_fredlund$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "fredlund")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+
+first_part <- (100/(log(exp(1)+(((result_fredlund$par[1]/indexNO)^result_fredlund$par[2])^result_fredlund$par[3]))))
+second_part <- (1-(log(1+min(indexNO)/indexNO)/log(1+min(indexNO)/0.00001))^7)
+yhatNO_fredlund <- first_part * second_part
+lines(log(indexNO), yhatNO_fredlund, col = "red", lwd = 2)
+
+# verosimilitud
+result_fredlund$value
+
+######################## skaggs
+set.seed(123456)
+llike.skaggs <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- 100/(1+(100/beta0-1)*exp(-beta1*SIZE^beta2))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_skaggs <- c(15, 1, 1, 7)
+# Optimiza la log-verosimilitud (G1)
+result_skaggs <- optim(initial_skaggs, llike.skaggs, method = "SANN",
+                       y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_skaggs)
+coeficientes3 <- result_skaggs$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "skaggs")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_skaggs <- 100/(1+(100/result_skaggs$par[1]-1)*exp(-result_skaggs$par[2]*indexNO^result_skaggs$par[3]))
+lines(log(indexNO), yhatNO_skaggs, col = "red", lwd = 2)
+
+# verosimilitud
+result_skaggs$value
+
+
+# plot de otros 5 modelos
+
+
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab = expression( paste("Granulometría [log(",mu,"m)]")) , main = "Ajuste de los modelos")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+lines(log(indexNO), yhatNO_fredlund, col = "red", lwd = 3)
+lines(log(indexNO), yhatNO_havercamp, col = "blue", lwd = 3)
+lines(log(indexNO), yhatNO_morganetal, col = "green", lwd = 3)
+lines(log(indexNO), yhatNO_richards, col = "purple", lwd = 3)
+lines(log(indexNO), yhatNO_skaggs, col = "black", lwd = 3)
+
+legend("bottomright",
+       legend = c("Modelo Fredlund", "Modelo Havercamp", "Modelo Morgan et al.", "Modelo Richards", "Modelo Skaggs"),
+       col = c("red", "blue", "green", "purple", "black"),
+       lwd = 3,
+       bty = "n")
+
+######################CON GGPLOT
+
+ggplot(Hidroc, aes(x = log(SIZE), y = Acum..Pasante)) +
+    geom_point(aes(color = factor("Datos", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs")))) +
+    geom_line(data = line_data1, aes(x = log(indexNO), y = yhatNO_fredlund, color = factor("Fredlund", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_havercamp, color = factor("Havercamp", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_morganetal, color = factor("Morgan et al", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_richards, color = factor("Richards", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs"))), size = 1.5) +
+    geom_line(data = line_data2, aes(x = log(indexNO), y = yhatNO_skaggs, color = factor("Skaggs", levels = c("Datos", "Fredlund", "Havercamp", "Morgan et al", "Richards", "Skaggs"))), size = 1.5) +
+    
+    labs(x = "Granulometría", y = "Acumulado Pasante", title = "Ajuste de los modelos") +
+    ylim(0, 100) +
+    scale_color_manual(name = "Leyenda",
+                       values = c("Datos" = "black",
+                                  "Fredlund" = "yellow",
+                                  "Havercamp" = "blue",
+                                  "Morgan et al" = "purple",
+                                  "Richards" = "green",
+                                  "Skaggs" = "red")) +
+    theme_minimal()
+
+
+######################## lima
+set.seed(123456)
+llike.lima <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- beta0 + (100-beta0)/(1+(beta1/SIZE)^beta2)^(1-1/beta2)
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_lima <- c(0, 0, 1, 1)
+# Optimiza la log-verosimilitud (G1)
+result_lima <- optim(initial_lima, llike.lima, method = "SANN",
+                     y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_lima)
+coeficientes3 <- result_lima$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "lima")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_lima <- result_lima$par[1] + (100-result_lima$par[1])/(1+(result_lima$par[2]/indexNO)^result_lima$par[3])^(1-1/result_lima$par[3])
+lines(log(indexNO), yhatNO_lima, col = "red", lwd = 2)
+
+max(yhatNO_lima)
+# verosimilitud
+result_lima$value
+
+
+########## logistica
+set.seed(123456)
+llike.logistica <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    #beta2 <- 100
+    sigma <- param[4]
+    mu <- 100/(1+ exp(-beta0*(SIZE- beta1)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+initial3_params <- c(0, 0, 1)
+# Optimiza la log-verosimilitud (G1)
+result_logistica <- optim(initial3_params, llike.L3, method = "L-BFGS-B",
+                          y = Hidroc$Acum..Pasante, SIZE = log(Hidroc$SIZE))
+print(result_logistica)
+coeficientes3 <- result_logistica$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad",main = "logistica")
+indexNO <- seq(min(log(Hidroc$SIZE)),max(log(Hidroc$SIZE)),length.out=5000)
+yhatNO_logistica <- 100/(1+exp(-result_logistica$par[1]*(indexNO- result_logistica$par[2])))
+lines(indexNO, yhatNO_logistica, col = "red", lwd = 2)
+
+# verosimilitud
+result_logistica$value
+
+
+# monomolecular
+set.seed(123456)
+llike.monomolecular <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- beta0*(1-(((beta0-beta1)/beta0)*exp(-beta2*SIZE)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_monomolecular <- c(100, 0, 0, 7)
+# Optimiza la log-verosimilitud (G1)
+result_monomolecular <- optim(initial_monomolecular, llike.monomolecular, method = "SANN",
+                              y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_monomolecular)
+coeficientes3 <- result_monomolecular$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Monomolecular")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_monomolecular <- result_monomolecular$par[1]*(1-(((result_monomolecular$par[1]-result_monomolecular$par[2])/result_monomolecular$par[1])*exp(-result_monomolecular$par[3]*indexNO)))
+lines(log(indexNO), yhatNO_monomolecular, col = "red", lwd = 2)
+
+# verosimilitud
+result_monomolecular$value
+
+
+
+# Brody
+set.seed(123456)
+llike.brody <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- beta0*(1-(((beta0-beta1)/beta0)*exp(-beta2*SIZE)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_brody <- c(100, 0, 0, 7)
+# Optimiza la log-verosimilitud (G1)
+result_brody <- optim(initial_brody, llike.brody, method = "SANN",
+                      y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_brody)
+coeficientes3 <- result_brody$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Brody")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_brody <- result_monomolecular$par[1]*(1-(((result_monomolecular$par[1]-result_monomolecular$par[2])/result_monomolecular$par[1])*exp(-result_monomolecular$par[3]*indexNO)))
+lines(log(indexNO), yhatNO_brody, col = "red", lwd = 2)
+
+# verosimilitud
+result_brody$value
+
+# Bertalanffy
+set.seed(123456)
+llike.bertalanffy <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    sigma <- param[4]
+    mu <- beta0*(1- exp(-beta1*(SIZE-beta2)))
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_bertalanffy <- c(100, 0, 0, 7)
+# Optimiza la log-verosimilitud (G1)
+result_bertalanffy <- optim(initial_bertalanffy, llike.bertalanffy, method = "SANN",
+                            y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_bertalanffy)
+coeficientes3 <- result_bertalanffy$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granulometría", main = "Bertalanffy")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_bertalanffy <- result_bertalanffy$par[1]*(1- exp(-result_bertalanffy$par[2]*(indexNO-result_bertalanffy$par[3])))
+lines(log(indexNO), yhatNO_bertalanffy, col = "red", lwd = 2)
+
+# Cargar librerías necesarias
+library(ggplot2)
+
+# Suponiendo que 'Hidroc' es tu dataframe
+# Calcular los valores ajustados usando el modelo de Bertalanffy
+indexNO <- seq(min(Hidroc$SIZE), max(Hidroc$SIZE), length.out = 5000)
+yhatNO_bertalanffy <- 98.35030894 * (1 - exp(-0.06821427 * (indexNO - 0.70781219)))
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granulometría", main = "Bertalanffy")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_bertalanffy <- result_bertalanffy$par[1]*(1- exp(-result_bertalanffy$par[2]*(indexNO-result_bertalanffy$par[3])))
+lines(log(indexNO), yhatNO_bertalanffy, col = "red", lwd = 2)
+
+
+# Hill
+# link del hill
+# http://article.sapub.org/10.5923.j.statistics.20201006.01.html#:~:text=Hill%20model%20is%20an%20S,it%20is%20used%20in%20prediction.
+set.seed(123456)
+llike.hill <- function(param, y, SIZE) {
+    beta0 <- param[1]
+    beta1 <- param[2]
+    beta2 <- param[3]
+    beta3 <- param[4]
+    sigma <- param[5]
+    mu <- beta0 + beta1*(SIZE/(beta2+SIZE))^beta3 
+    n <- length(y)  # Define n como la longitud del vector de datos
+    ll = -(n/2) * log(2 * pi * sigma^2) - (1 / (2 * sigma^2)) * sum((y - mu)^2)
+    return(-ll)  # Negamos la log-verosimilitud porque optim minimiza
+}
+# Usa valores iniciales razonables para mu y sigma
+initial_hill <- c(10, 1, 0, 0, 7)
+# Optimiza la log-verosimilitud (G1)
+result_hill <- optim(initial_hill, llike.hill, method = "SANN",
+                     y = Hidroc$Acum..Pasante, SIZE = Hidroc$SIZE)
+print(result_hill)
+coeficientes3 <- result_hill$par
+
+# Calcula las funciones
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad", main = "Hill")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_hill <- result_hill$par[1] + result_hill$par[2]*(indexNO/(result_hill$par[3]+indexNO))^result_hill$par[4]
+lines(log(indexNO), yhatNO_hill, col = "red", lwd = 2)
+
+# verosimilitud
+result_hill$value
+
+# grafico de los modelos
+
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante",xlab="Granularidad",main = "logistica")
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+yhatNO_logistica <- result_logistica$par[3]/(1+exp(-result_logistica$par[1]*(indexNO- result_logistica$par[2])))
+lines(indexNO, yhatNO_logistica, col = "red", lwd = 2)
+
+
+
+
+
+
+
+
+
+
+plot(log(Hidroc$SIZE),Hidroc$Acum..Pasante,ylab="Acumulado Pasante", xlab = expression( paste("Granulometría [log(",mu,"m)]")), main = "Ajuste de los modelos")
+
+indexNO <- seq(min(Hidroc$SIZE),max(Hidroc$SIZE),length.out=5000)
+lines(log(indexNO), yhatNO_hill, col = "red", lwd = 3)
+lines(log(indexNO), yhatNO_bertalanffy, col = "blue", lwd = 3)
+lines(log(indexNO), yhatNO_brody, col = "green", lwd = 3)
+lines(log(indexNO), yhatNO_monomolecular, col = "yellow", lwd = 3)
+lines(log(indexNO), yhatNO_lima, col = "gray", lwd = 3)
+indexNO <- seq(min(log(Hidroc$SIZE)),max(log(Hidroc$SIZE)),length.out=5000)
+yhatNO_logistica <- 100/(1+exp(-result_logistica$par[1]*(indexNO- result_logistica$par[2])))
+lines(indexNO, yhatNO_logistica, col = "purple", lwd = 3)
+
+
+legend("bottomright",
+       legend = c( 
+           "Modelo Hill",
+           "Modelo Bertalanffy",
+           "Modelo Brody", 
+           "Modelo Monomolecular",
+           "Modelo Logística",
+           "Modelo Lima"),
+       col = c("red", "blue", "green", "yellow", "purple", "gray"),
+       lwd = 3,
+       bty = "n")
+
+
+
+
+###################################### con ggplot
+
+
+library(ggplot2)
+
+# Crear dataframes para las líneas de ajuste (ajustar según los datos)
+indexNO <- seq(min(Hidroc$SIZE), max(Hidroc$SIZE), length.out = 5000)
+indexNO1 <- seq(min(log(Hidroc$SIZE)), max(log(Hidroc$SIZE)), length.out = 5000)
+
+ggplot(Hidroc, aes(x = log(SIZE), y = Acum..Pasante)) +
+    geom_point(aes(color = "Datos")) +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_hill, color = "Hill"), size = 1.5) +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_bertalanffy, color = "Bertalanffy"), size = 1.5) +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_brody, color = "Brody"), size = 1.5) +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_monomolecular, color = "Monomolecular"), size = 1.5) +
+    geom_line(data = line_data, aes(x = indexNO1, y = yhatNO_logistica, color = "Logística"), size = 1.5) +
+    geom_line(data = line_data, aes(x = log(indexNO), y = yhatNO_lima, color = "Lima"), size = 1.5) +
+    
+    labs(x = expression(paste("Granulometría [log(", mu, "m)]")), 
+         y = "Acumulado Pasante", 
+         title = "Ajuste de los modelos") +
+    scale_color_manual(name = "Modelos",
+                       values = c("Datos" = "black",
+                                  "Bertalanffy" = "blue",
+                                  "Brody" = "green",
+                                  "Hill" = "red",
+                                  "Lima" = "gray",
+                                  "Logística" = "purple",
+                                  "Monomolecular" = "yellow"),
+                       breaks = c("Datos", "Bertalanffy", "Brody", "Hill", "Lima", "Logística", "Monomolecular")) +
+    theme_minimal() +
+    coord_cartesian(xlim = c(min(log(Hidroc$SIZE)), 7))  # Ajustar el límite del eje x
+
+
+#######las verosimilitud de todos
+result_bass$value
+result_lima$value
+result_monomolecular$value
+result_brody$value
+result_bertalanffy$value
+result_hill$value
+result_logistica$value
+result_skaggs$value
+result_fredlund$value
+result_havercamp$value
+result_morganetal$value
+result_richards$value
+result_Lweibull$value
+result_Lgompertz$value
+result_swebrec$value
+result_gaudin_schuhmann$value
+result_rossin_rammler$value
+################ AIC
+
+AIC_bass <- 2*result_bass$value+2*3
+AIC_lima <- 2*result_lima$value+2*3
+AIC_monomolecular <- 2*result_monomolecular$value+2*3
+AIC_brody <- 2*result_brody$value+2*3
+AIC_bertalanffy <- 2*result_bertalanffy$value+2*3
+AIC_hill <- 2*result_hill$value+2*3
+AIC_logistica <- 2*result_logistica$value+2*2
+AIC_skaggs <- 2*result_skaggs$value+2*3
+AIC_fredlund <- 2*result_fredlund$value+2*3
+AIC_havercamp <- 2*result_havercamp$value+2*3
+AIC_morganetal <- 2*result_morganetal$value+2*3
+AIC_richards <- 2*result_richards$value+2*3
+AIC_Lweibull <- 2*result_Lweibull$value+2*3
+AIC_Lgompertz <- 2*result_Lgompertz$value+2*2
+AIC_swebrec <- 2*result_swebrec$value+2*2
+AIC_gaudin_schuhmann <- 2*result_gaudin_schuhmann$value+2*2
+AIC_rossin_rammler <- 2*result_rossin_rammler$value+2*3
+
+AIC_bass
+AIC_monomolecular
+AIC_brody
+AIC_bertalanffy
+AIC_hill
+AIC_logistica
+AIC_lima
+AIC_skaggs
+AIC_fredlund
+AIC_havercamp
+AIC_morganetal
+AIC_richards
+AIC_Lweibull
+AIC_Lgompertz
+AIC_swebrec
+AIC_gaudin_schuhmann
+AIC_rossin_rammler
+
+
+# BIC
+# BIC = k*ln(n) - 2ln(L) 
+length(Hidroc$SIZE)
+
+BIC_bass <- 2*result_bass$value+log(length(Hidroc$SIZE))*3
+BIC_lima <- 2*result_lima$value+log(length(Hidroc$SIZE))*3
+BIC_monomolecular <- 2*result_monomolecular$value+log(length(Hidroc$SIZE))*3
+BIC_brody <- 2*result_brody$value+log(length(Hidroc$SIZE))*3
+BIC_bertalanffy <- 2*result_bertalanffy$value+log(length(Hidroc$SIZE))*3
+BIC_hill <- 2*result_hill$value+log(length(Hidroc$SIZE))*3
+BIC_logistica <- 2*result_logistica$value+log(length(Hidroc$SIZE))*2
+BIC_skaggs <- 2*result_skaggs$value+log(length(Hidroc$SIZE))*3
+BIC_fredlund <- 2*result_fredlund$value+log(length(Hidroc$SIZE))*3
+BIC_havercamp <- 2*result_havercamp$value+log(length(Hidroc$SIZE))*3
+BIC_morganetal <- 2*result_morganetal$value+log(length(Hidroc$SIZE))*3
+BIC_richards <- 2*result_richards$value+log(length(Hidroc$SIZE))*3
+BIC_Lweibull <- 2*result_Lweibull$value+log(length(Hidroc$SIZE))*3
+BIC_Lgompertz <- 2*result_Lgompertz$value+log(length(Hidroc$SIZE))*2
+BIC_swebrec <- 2*result_swebrec$value+log(length(Hidroc$SIZE))*2
+BIC_gaudin_schuhmann <- 2*result_gaudin_schuhmann$value+log(length(Hidroc$SIZE))*2
+BIC_rossin_rammler <- 2*result_rossin_rammler$value+log(length(Hidroc$SIZE))*3
+
+BIC_bass
+BIC_monomolecular
+BIC_brody
+BIC_bertalanffy
+BIC_hill
+BIC_logistica
+BIC_lima
+BIC_skaggs
+BIC_fredlund
+BIC_havercamp
+BIC_morganetal
+BIC_richards
+BIC_Lweibull
+BIC_Lgompertz
+BIC_swebrec
+BIC_gaudin_schuhmann
+BIC_rossin_rammler
+
+##########################AICc
+AICC_bass <-AIC_bass + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_lima <- AIC_lima + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_monomolecular <- AIC_monomolecular + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_brody <- AIC_brody + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_bertalanffy <- AIC_bertalanffy + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_hill <- AIC_hill + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_logistica <- AIC_logistica + 2*2*(2+1)/(length(Hidroc$SIZE)-2-1)
+AICC_skaggs <- AIC_skaggs + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_fredlund <- AIC_fredlund + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_havercamp <- AIC_havercamp + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_morganetal <- AIC_morganetal + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_richards <- AIC_richards + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_Lweibull <- AIC_Lweibull + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+AICC_Lgompertz <- AIC_Lgompertz + 2*2*(2+1)/(length(Hidroc$SIZE)-2-1)
+AICC_swebrec <- AIC_swebrec + 2*2*(2+1)/(length(Hidroc$SIZE)-2-1)
+AICC_gaudin_schuhmann <- AIC_gaudin_schuhmann + 2*2*(2+1)/(length(Hidroc$SIZE)-2-1)
+AICC_rossin_rammler <- AIC_rossin_rammler + 2*3*(3+1)/(length(Hidroc$SIZE)-3-1)
+
+
+AICC_bass
+AICC_monomolecular
+AICC_brody
+AICC_bertalanffy
+AICC_hill
+AICC_logistica
+AICC_lima
+AICC_skaggs
+AICC_fredlund
+AICC_havercamp
+AICC_morganetal
+AICC_richards
+AICC_Lweibull
+AICC_Lgompertz
+AICC_swebrec
+AICC_gaudin_schuhmann
+AICC_rossin_rammler
