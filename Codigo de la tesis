@@ -16,6 +16,7 @@ library(car) #qqPlot
 # Leer el archivo
 ruta_archivo <- file.choose()
 Hidroc <- read_excel(ruta_archivo)
+dados <- Hidroc
 names(Hidroc)
 ##################### Tabla #########################
 head(Hidroc)
