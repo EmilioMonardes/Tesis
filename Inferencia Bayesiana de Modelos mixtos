@@ -1,0 +1,1375 @@
+library(nlme)
+library(Hmisc)
+library(lattice)
+library(rstan)
+library(loo)
+require(shinystan)
+require(bayesplot)
+
+################## logistico ############################
+######################## Sin efecto aleatorio
+scode2 = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real beta0;
+  real beta1;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 / (1 + exp(beta0 * (beta1 - x)));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scode = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 / (1 + exp( (beta0 + b0[id[i]]) * ((beta1+b1[id[i]])-x[i])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+#################### Gaudin -schuhmann
+
+
+######################## Sin efecto aleatorio
+
+scodeschuhmann = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 * (x / beta0) ^ beta1;
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+
+######################### Con efecto aleatorio
+scodeschuhmann2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 * (x[i]/ (beta0 + b0[id[i]]) ) ^ (beta1+b1[id[i]]);
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+############## Rosin-Rammler
+
+######################## Sin efecto aleatorio
+
+scoderosin = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 * (1-exp(-(x / beta0) ^ beta1));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scoderosin2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 * (1-exp(-(x[i] / (beta0 + b0[id[i]])) ^ (beta1+b1[id[i]])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+
+########################## Weibull
+
+######################## Sin efecto aleatorio
+
+scodeweibull = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 - ((100 - beta0) * exp((-(beta1 * x)^beta2)));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodeweibull2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 - ((100 - (beta0+ b0[id[i]])) * exp((-((beta1+ b1[id[i]]) * x[i])^(beta2+ b2[id[i]]))));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Gompertz
+
+
+######################## Sin efecto aleatorio
+
+scodegompertz = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100*exp(-exp(-(beta0*x)^beta1));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodegompertz2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 * exp(-exp(-((beta0 + b0[id[i]]) * x[i]) ^ (beta1 + b1[id[i]])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Hill
+
+######################## Sin efecto aleatorio
+
+scodehill = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = (beta2 * beta0^ beta1)/(beta0^beta1 + x^beta1);
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodehill2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = ((beta2 + b2[id[i]]) * (beta0 + b0[id[i]]) ^ (beta1 + b1[id[i]]))/((beta0 + b0[id[i]]) ^ (beta1 + b1[id[i]]) + x[i] ^ (beta1 + b1[id[i]]));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Bass
+
+######################## Sin efecto aleatorio
+
+scodebass = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = beta0 * (1 - exp(-(beta1 + beta2) * x)) ./ (1 + (beta2 / beta1) * exp(-(beta1 + beta2) * x));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodebass2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = (beta0 + b0[id[i]]) * (1 - exp(-((beta1 + b1[id[i]]) + (beta2 + b2[id[i]])) * x[i])) ./ (1 + ((beta2 + b2[id[i]]) / (beta1 + b1[id[i]])) * exp(-((beta1 + b1[id[i]]) + (beta2 + b2[id[i]])) * x[i]));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Brody
+
+######################## Sin efecto aleatorio
+
+scodebrody = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = beta0 * (1 - ((beta0 - beta1) / beta0) * exp(-beta2 * x));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodebrody2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = (beta0 + b0[id[i]]) * (1 - (((beta0 + b0[id[i]]) - (beta1 + b1[id[i]])) / (beta0 + b0[id[i]])) * exp(-(beta2 + b2[id[i]]) * x[i]));;
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Bertalanffy
+
+######################## Sin efecto aleatorio
+
+scodebertalanffy = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 * (1 - exp(-beta0 * (x - beta1)));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodebertalanffy2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 * (1 - exp(-(beta0 + b0[id[i]]) * (x[i] - (beta1 + b1[id[i]]))));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Monomolecular
+
+######################## Sin efecto aleatorio
+
+scodemonomolecular = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = beta0 * (1 - ((beta0 - beta1) / beta0) * exp(-beta2 * x));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodemonomolecular2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = (beta0 + b0[id[i]]) * (1 - (((beta0 + b0[id[i]]) - (beta1 + b1[id[i]])) / (beta0 + b0[id[i]])) * exp(-(beta2 + b2[id[i]]) * x[i]));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Lima
+
+######################## Sin efecto aleatorio
+
+scodelima = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = beta0 + (100 - beta0) / (1 + (beta1 / x) ^ beta2) ^ (1 - 1 / beta2);  
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodelima2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = (beta0 + b0[id[i]]) + (100 - (beta0 + b0[id[i]])) / (1 + ((beta1 + b1[id[i]]) / x[i]) ^ (beta2 + b2[id[i]])) ^ (1 - 1 / (beta2 + b2[id[i]]));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Skaggs
+
+######################## Sin efecto aleatorio
+
+scodeskaggs = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 / (1 + (100 / beta0 - 1) * exp(-beta1 * x ^ beta2));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodeskaggs2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 / (1 + (100 / (beta0 + b0[id[i]]) - 1) * exp(-(beta1 + b1[id[i]]) * x[i] ^ (beta2 + b2[id[i]])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Fredlund
+
+######################## Sin efecto aleatorio
+
+scodefredlund = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  //mu = 100 / (log(exp(1) + ((beta0 / x) ^ beta1) ^ beta2) * (1 - (log(1 + 0.105 / x) / log(1 + 0.105 / 0.00001)) ^ 7));
+  mu = 100 ./ (log(exp(1) + pow(beta0 ./ x, beta1 * beta2)) .* (1 - pow(log(1 + 0.105 ./ x) ./ log(1 + 0.105 / 0.00001), 7))); // version rstan
+  
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"######################### Con efecto aleatorio
+scodefredlund2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 ./ (log(exp(1) + pow((beta0 + b0[id[i]]) ./ x[i], (beta1 + b1[id[i]]) * (beta2 + b2[id[i]]))) .* (1 - pow(log(1 + 0.105 ./ x[i]) ./ log(1 + 0.105 / 0.00001), 7)));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Havercamp
+
+######################## Sin efecto aleatorio
+
+scodehavercamp = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 / (1 + (beta0 / x) ^ beta1) ^ beta2;
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodehavercamp2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 / (1 + ((beta0 + b0[id[i]]) / x[i]) ^ (beta1 + b1[id[i]])) ^ (beta2 + b2[id[i]]);
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Morganetal
+
+######################## Sin efecto aleatorio
+
+scodemorganetal = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 - ((100 - beta0) / (1 + (beta1 * x) ^ beta2));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodemorganetal2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 - ((100 - (beta0 + b0[id[i]])) / (1 + ((beta1 + b1[id[i]]) * x[i]) ^ (beta2 + b2[id[i]])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Richards
+
+######################## Sin efecto aleatorio
+
+scoderichards = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> beta2;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 * (1+(beta0 - 1) * exp(- beta1 *(x-beta2)))^(1/(1-beta0));
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+  beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scoderichards2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    real beta2;
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    vector[K] b2;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 * (1+((beta0+ b0[id[i]]) - 1) * exp(- (beta1+ b1[id[i]]) *(x[i]-(beta2+ b2[id[i]]))))^(1/(1-(beta0+ b0[id[i]])));
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+    beta2 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+########################## Swebrec
+######################## Sin efecto aleatorio
+
+scodeswebrec = "// BLOQUE DE LOS DATOS
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+  real<lower=0> beta0;
+  real<lower=0> beta1;
+  real<lower=0> sigma;
+}
+// BLOQUE DE LA TRANSFORMADA
+transformed parameters {
+  vector[N] mu;
+  mu = 100 / (1+(log(max(x)/x)/log(max(x))/beta1))^beta0;
+    
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+  //VEROSIMILITUD
+  y ~ normal(mu, sigma);
+  //PRIORI
+  beta0 ~ normal(1, 100);
+  beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+"
+######################### Con efecto aleatorio
+scodeswebrec2 = "// BLOQUE DE LOS DATOS
+data {
+    int<lower=1> N;
+    vector[N] x;
+    vector[N] y;
+    int<lower=1> K;
+    int<lower=1, upper=K> id[N];
+}
+// BLOQUE DE LOS PARAMETROS
+parameters {
+    real beta0;
+    real beta1;      // or vector[2] beta; //intercept and slope
+    vector[K] b0;
+    vector[K] b1;    // or matrix[2,K] w; //groups intercepts, slopes
+    real<lower=0> sigma;
+}
+transformed parameters {
+    vector[N] mu;
+    for (i in 1:N){
+    mu[i] = 100 / (1+(log(max(x)/x[i])/log(max(x))/(beta1+b1[id[i]])))^(beta0 + b0[id[i]]);
+    }
+}
+// BLOQUE MODELO (PRIORI + VEROSIMILITUD)
+model {
+    //VEROSIMILITUD
+    y ~ normal(mu, sigma);
+    //PRIORI
+    beta0 ~ normal(1, 100);
+    beta1 ~ normal(0.2, 100);
+}
+// GENERATED QUATITIES BLOCK
+generated quantities {
+    array[N] real log_lik;
+    for (n in 1:N) {
+        log_lik[n] = normal_rng(mu[n],sigma);
+    }
+}
+
+"
+
