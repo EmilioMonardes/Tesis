@@ -1,0 +1,510 @@
+# Load packages                           
+library(nlme)
+library(Hmisc)
+library(lattice)
+
+# Load functions for elliptical models
+source('Elliptical_functions.r')
+
+# Choose elliptical model & nonlinear model
+modelo <- 'normal'
+funcao = 'm7'
+
+# Number of observations by group/subject
+m <- c(50,50,50,50,50,50,40,50,50,49,35,47,40,42,50)
+mm <- m
+ma = c(1,(cumsum(m)+1))
+
+y<- dados$Y
+x<- dados$X
+dados$x <- x
+n = length(y)
+p<- 3  
+ii = unique(dados$ID)
+
+# Nonlinear function 
+f<-function(t,x,funcao){
+    beta1 = t[1];
+    beta2 = t[2];
+    beta3 = t[3];
+    switch(funcao,
+           'logistica' = {beta1/(1+exp(-(x-beta2)/beta3))},
+           'Gompertz' = {
+               .a = beta1 * exp(-beta2 * exp(-beta3 * x)); 
+               .a[is.na(.a)] <- 0;
+               .a;},
+           'm2' = {100 / (1 + (beta1 / x)^beta2) ^ beta3},
+           'm3' = {beta1 + ((100 - beta1)/(1 + (beta2 / x) ^ beta3) ^ ((1 - 1 / beta3)))},
+           'm4' = {100 - ((100 - beta1) * exp((-(beta2*x)^beta3)) )},
+           'm5' = {(beta3 * beta1 ^ beta2) / (beta1 ^ beta2 + x ^ beta2)},
+           'm6' = {beta1 * (1 - ((((beta1 - beta2) / beta1) * exp(-beta3 * x))))},
+           'm7' = {beta1 * (1 - exp(- beta2 * (x-beta3)))},
+           'm8' = {beta1 * (1-(((beta1 - beta2) / beta1) * exp(-beta3 * x)))},
+           'm9' = {100/(1+(100/ beta1 - 1) * exp(-beta2 * x^beta3))},
+           'm10' = {100-((100-beta1)/(1+(beta2 * x)^beta3))},
+           'm11' = {100 * (1 + (beta1 - 1) * exp(- beta2 *(x-beta3))) ^ (1/(1- beta1))},
+           'm12' = {100/(1 + (log (200 /x) / log (200)/beta2 )) ^ beta1},
+           'm16' = {beta3 *(x/ beta1)^beta2},
+           'm14' = {100 * (1-exp(-(x / beta1) ^ beta2))}
+           
+    )
+}
+
+# Gradient matrix
+J<-function(t,x,funcao){
+    beta1 = t[1];
+    beta2 = t[2];
+    beta3 = t[3];
+    switch(funcao,
+           'logistica'=
+               {
+                   J1<- 1/(1+exp(-(x-beta2)/beta3));
+                   J2<- -beta1*exp(-(x-beta2)/beta3)/((1+exp(-(x-beta2)/beta3))^2*beta3);
+                   J3<- -beta1*(x-beta2)*exp(-(x-beta2)/beta3)/((1+exp(-(x-beta2)/beta3))^2*beta3^2);
+                   cbind(J1,J2,J3);
+               },
+           'Gompertz' = 
+               {
+                   #f<-function(beta1,beta2,beta3,x){ beta1 * exp(-beta2 * exp(-beta3 * x))}
+                   #Deriv(f,'beta1')
+                   J1 = exp(-(beta2 * exp(-(beta3 * x))));
+                   
+                   #Deriv(f,'beta2')
+                   .e1 <-  .e2 <- exp(-(beta3 * x));
+                   J2 <- -(beta1 * exp(-(beta2 * .e2)) * .e2);
+                   
+                   #Deriv(f,'beta3')
+                   .e2 <- exp(-(beta3 * x));
+                   J3 <- beta1 * beta2 * x * exp(-(beta2 * .e2)) * .e2;    
+                   cbind(J1,J2,J3);},
+           'm2'= { #Havercamp
+               #f function <- 100 / (1 + (beta1 / x)^beta2) ^ beta3; 
+               J1<- -(100 * beta2 * beta3 * (beta1 / x)^beta2 * ((beta1 / x)^beta2 + 1)^(-beta3 - 1)) / beta1;
+               J2<- -100 * (beta1 / x)^beta2 * log(beta1 / x) * ((beta1 / x)^beta2 + 1)^(-beta3 - 1) * beta3;
+               J3<- -(100 * log((beta1 / x)^beta2 + 1)) / ((beta1 / x)^beta2 + 1)^beta3;
+               cbind(J1,J2,J3);
+           },
+           'm3'= { #LIMA
+               #f funcition <- beta1 + ((100 - beta1)/(1+ (beta2 / x)^beta3)^{(1 - 1/ beta3)}); 
+               J1<- 1 - ((beta2 / x)^beta3 + 1)^(1 / beta3 - 1);
+               J2<- ((100 - beta1) * (1 / beta3 - 1) * beta3 * (beta2 / x)^beta3 * ((beta2 / x)^beta3 + 1)^(1 / beta3 - 2)) / beta2;
+               J3<- (100 - beta1) * ((beta2 / x)^beta3 + 1)^(1 / beta3 - 1) * (((beta2 / x)^beta3 * log(beta2 / x) * (1 / beta3 - 1)) / ((beta2 / x)^beta3 + 1) - log((beta2 / x)^beta3 + 1) / beta3^2);
+               cbind(J1,J2,J3);
+           },
+    'm4'= { #Weibull
+        #f function <- 100 - ((100 - beta1) * exp((-(beta2 * x)^beta3))); 
+        J1<- exp(-(x * beta2)^beta3);
+        J2<- ((100 - beta1) * beta3 * (x * beta2)^beta3 * exp(-(x * beta2)^beta3)) / beta2;
+        J3<- (100 - beta1) * (x * beta2) ^ beta3 * log(x * beta2) * exp(-(x * beta2) ^ beta3);
+        cbind(J1,J2,J3);
+    },
+    'm5'= { #Hill 
+        #f funcition <- (beta3 * beta1 ^ beta2) / (beta1 ^ beta2 + x ^ beta2); 
+        J1<- (x ^ beta2 * beta2 * beta3 * beta1 ^ (beta2 - 1)) / (beta1 ^ beta2 + x ^ beta2)^2;
+        J2<- (x ^ beta2 * beta1 ^ beta2 * (log(beta1) - log(x)) * beta3) / (beta1 ^ beta2 + x ^ beta2)^2;
+        J3<- beta1^ beta2 / (beta1 ^ beta2 + x ^ beta2);
+        cbind(J1,J2,J3);
+    },
+    
+    'm6'= { #Brody
+        #f ; beta1 * (1 - ((((beta1 - beta2) / beta1) * exp(-beta3 * x)))
+        J1<- exp(-x * beta3) * (exp(x * beta3) - 1);
+        J2<- exp(-x * beta3);
+        J3<- x * (beta1 - beta2) * exp(-x * beta3);
+        cbind(J1,J2,J3);
+    },
+    
+    'm7'= { #Bertalanffy 
+        #f ; beta1 * (1 - exp(- beta2 * (x-beta3)))
+        J1<- 1 - exp(-beta2 * (x - beta3));
+        J2<- -beta1 * (beta3 - x) * exp(-(x - beta3) * beta2);
+        J3<- -beta1 * beta2 * exp(-beta2 * (x - beta3));
+        cbind(J1,J2,J3);
+    },
+    
+    'm8'= { #Monomolecular 
+        #f ; beta1 * (1-(((beta1 - beta2) / beta1) * exp(-beta3 * x)))
+        J1<- exp(-x * beta3) * (exp(x * beta3) - 1);
+        J2<- exp(-x * beta3);
+        J3<- x * (beta1 - beta2) * exp(-x * beta3);
+        cbind(J1,J2,J3);
+    },
+    
+    'm9'= { #Skaggs
+        #f ; 100/(1+(100/ beta1 - 1) * exp(-beta2 * x^beta3))
+        J1<- (10000 * exp(x^beta3 * beta2)) / ((exp(x ^ beta3 * beta2) - 1) * beta1 + 100)^2;
+        J2<- -(100 * x ^ beta3 * (beta1 - 100) * beta1 * exp(x ^ beta3 * beta2)) / (beta1 * exp(x ^ beta3 * beta2) - beta1 + 100)^2;
+        J3<- -(100 * x ^ beta3 * log(x) * (beta1 - 100) * beta1 * beta2 * exp(x ^ beta3 * beta2)) / (beta1 * exp(x ^ beta3 * beta2) - beta1 + 100)^2;
+        cbind(J1,J2,J3);
+    },
+    
+    'm10'= { #Morganetal
+        #f ; 100-((100-beta1)/(1+(beta2 * x)^beta3))
+        J1<- 1 / ((x * beta2) ^ beta3 + 1);
+        J2<- ((100 - beta1) * beta3 * (x * beta2) ^ beta3) / (beta2 * ((x * beta2)^beta3 + 1)^2);
+        J3<- ((100 - beta1) * (x * beta2) ^ beta3 * log(x * beta2)) / ((x * beta2)^beta3 + 1)^2;
+        cbind(J1,J2,J3);
+    },
+    
+    'm11'= { #Richards
+        #f ; 100 * (1 + (beta1 - 1) * exp(- beta2 *(x-beta3))) ^ (1/(1- beta1))
+        J1<- 100 * (exp(-beta2 * (x - beta3)) / ((exp(-beta2 * (x - beta3)) * (beta1 - 1) + 1) * (1 - beta1)) + log(exp(-beta2 * (x - beta3)) * (beta1 - 1) + 1) / (1 - beta1)^2) * (exp(-beta2 * (x - beta3)) * (beta1 - 1) + 1)^(1 / (1 - beta1));
+        J2<- -(100 * (beta3 - x) * ((beta1 - 1) * exp(-(x - beta3) * beta2) + 1)^(1 / (1 - beta1))) / (exp((x - beta3) * beta2) + beta1 - 1);
+        J3<- -(100 * beta2 * ((beta1 - 1) * exp(-beta2 * (x - beta3)) + 1)^(1 / (1 - beta1))) / (exp(beta2 * (x - beta3)) + beta1 - 1);
+        cbind(J1,J2,J3);
+    },
+    
+    'm12'= { #Swebrec
+        #f ; 100/(1 + (log (200 /x) / log (200)/beta2 )) ^ beta1
+        J1<- -(log(log(200 / x) / (log(200) * beta2) + 1) * beta3) / (log(200 / x) / (log(200) * beta2) + 1)^beta1;
+        J2<- (log(200 / x) * beta1 * beta3 * (log(200 / x) / (log(200) * beta2) + 1)^(-beta1 - 1)) / (log(200) * beta2^2);
+        J3<- 1 / (log(200 / x) / (log(200) * beta2) + 1) ^ beta1;
+        cbind(J1,J2,J3);
+    },
+    
+    'm13'= { #Bass
+        #f ; (beta1 * ((1-exp(-(beta2+beta3)* x))))/((1+ (beta3 / beta2) * exp(-(beta2+ beta3) * x)))
+        J1<- (beta2 * (exp(x * (beta3 + beta2)) - 1)) / (beta2 * exp(x * (beta3 + beta2)) + beta3);
+        J2<- (beta1 * ((x * beta2^2 + x * beta3 * beta2 + beta3) * exp(x * (beta2 + beta3)) - beta3)) / (beta2 * exp(x * (beta2 + beta3)) + beta3)^2;
+        J3<- (beta1 * beta2 * ((x * beta3 + x * beta2 - 1) * exp(x * (beta3 + beta2)) + 1)) / (beta2 * exp(x * (beta3 + beta2)) + beta3)^2;
+        cbind(J1,J2,J3);
+    },
+    'm14'= { #Rosin-Rammler
+        #f ; beta3 * (1-exp(-(x / beta1) ^ beta2))
+        J1<- -(beta2 * beta3 * (x / beta1)^beta2 * exp(-(x / beta1)^beta2)) / beta1;
+        J2<- log(x / beta1) * (x / beta1)^beta2 * exp(-(x / beta1)^beta2) * beta3;
+        J3<- 1 - exp(-(x / beta1)^beta2);
+        cbind(J1,J2,J3);
+    },
+    'm16'= { #Gaudin-Schuhmann
+        #f ; beta3 * (x / beta1) ^ beta2
+        J1<- -(beta2 * beta3 * (x / beta1)^ beta2) / beta1;
+        J2<- log(x / beta1) * beta3 * (x / beta1)^beta2;
+        J3<- (x / beta1)^beta2;
+        cbind(J1,J2,J3);
+    },
+    'm17'= { #Fredlund
+        #f ; 100 / log(exp(1) + ((( beta1 / x) ^ {beta2})^{beta3})) * (1-(log(1+ min(x)/{x})/log(1+ min(x)/0.00001  ))^7)
+        J1<- -(beta2 * beta3 * (x / beta1)^ beta2) / beta1;
+        J2<- log(x / beta1) * (x / beta1)^beta2 * beta3;
+        J3<- (x / beta1)^beta2;
+        cbind(J1,J2,J3);
+    }
+    )
+}
+
+# Initial model
+modelo_inicial <- 
+    switch(funcao,
+           'logistica'= {
+               nls(y ~ K / (1 + exp(-b * (x - M))), 
+                   start = list(K = max(y), b = 0.5, M = median(x)))},
+           'Gompertz' = {nls(y ~ a * exp(-b * exp(-c * log(x))),
+                             start = list(a = max(y), b = 10, c = 0.9),
+                             control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm2' = {nls(y ~ 100 / (1 + (a / x) ^ b) ^ c,
+                       start = list(a = 5, b = 2, c = 2),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm3' = {nls(y ~ a + ((100 - a)/(1+ (b / x) ^ c)^((1 - 1 / c))),
+                       start = list(a = -1, b = 20, c = 2),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm4' = {nls(y ~ 100 - ((100 - a) * exp((-(b * x) ^ c))),
+                       start = list(a = min(y), b = 0.029, c = 0.8),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm5' = {nls(y ~ (c * a ^ b) / (a ^ b + x ^ b),
+                       start = list(a = 3, b = 2, c = max(y)),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm6' = {nls(y ~ a * (1 - ((((a - b) / a) * exp(-c * x)))),
+                       start = list(a = max(y), b = min(y), c = 0.002),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm7' = {nls(y ~ a * (1 - exp(- b * (x - c))),
+                       start = list(a = max(y), b = 0.01, c = min(x)),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm8' = {nls(y ~ a * (1-(((a - b) / a) * exp(-c * x))),
+                       start = list(a = max(y), b = min(y), c = 0.001),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm9' = {nls(y ~ 100/(1+(100/ a - 1) * exp(-b * x^c)),
+                       start = list(a = 2, b = 4, c = 0.1),
+                       control = nls.control(maxiter = 300, tol = 1e-6))},
+           'm10' = {nls(y ~ 100-((100-a)/(1+(b * x)^c)),
+                       start = list(a = min(y), b = 0.1, c = 0.9),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm11' = {nls(y ~ 100 * (1 + (a - 1) * exp(- b *(x-c))) ^ (1/(1 - a)),
+                       start = list(a = 0.2, b = 0.1, c = 10),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm12' = {nls(y ~ 100/(1 + (log (200 /x) / log (200)/b )) ^ a,
+                       start = list(a = 10, b = 5),
+                       control = nls.control(maxiter = 100, tol = 0.1))},
+           'm13' = {nls(y ~ (beta1 * ((1-exp(-(beta2+beta3)* x))))/((1+ (beta3 / beta2) * exp(-(beta2+ beta3) * x))),
+                       start = list(beta1 = 100, beta2 = 1, beta3 = 2),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm14' = {nls(y ~ c * (1-exp(-(x / a) ^ b)),
+                       start = list(a = 5, b = 1, c = 100),
+                       control = nls.control(maxiter = 100, tol = 1e-6))},
+           'm16' = {nls(y ~ c * (x / 204.16) ^ b ,
+                        start = list( b = 0.26, c = 100),
+                        control = nls.control(maxiter = 1000, tol = 10))}
+           
+           
+           )
+
+#plot(log(x),y)
+## Modelo ajustado sin efecto aleatorio
+# f<-function(beta1,beta2,beta3,x){beta1 * exp(-beta2 * exp(-beta3 * x))}
+summary(modelo_inicial)
+predito = predict(modelo_inicial,x)
+
+#plot(predito)
+# Visualization of initial model
+xyplot(y ~ x | ID,  groups=ID,data=dados, main='M13 (sin efectos aleatorios)',xlab = "Size", ylab = "Acumulado Pasante", pch = 16, 
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...);  
+           y.prev <- predito[dados$ID == unique(dados$ID)[panel.number()]]
+           llines(x, y.prev, lwd = 2, col = 1);  
+           panel.text(x = median(x)+54.5, y = median(y), labels = unique(dados$ID)[panel.number()], pos = 1, cex = 1.2);
+       })   
+
+beta_inicial = coef(modelo_inicial) 
+
+AIC(modelo_inicial);BIC(modelo_inicial)
+
+beta1 <- switch(funcao,
+                'logistica'=beta_inicial[1],
+                'Gompertz'=beta_inicial[1],
+                'm2'=beta_inicial[1],
+                'm3'=beta_inicial[1],
+                'm4'=beta_inicial[1],
+                'm5'=beta_inicial[1],
+                'm6'=beta_inicial[1],
+                'm7'=beta_inicial[1],
+                'm8'=beta_inicial[1],
+                'm9'=beta_inicial[1],
+                'm10'=beta_inicial[1],
+                'm11'=beta_inicial[1],
+                'm12'=beta_inicial[1],
+                'm13'=beta_inicial[1],
+                'm14'=beta_inicial[1],
+                'm15'=beta_inicial[1],
+                'm16'=beta_inicial[1],
+                'm17'=beta_inicial[1])
+
+beta2 <- switch(funcao,
+                'logistica'=beta_inicial[3],
+                'Gompertz'=beta_inicial[2],
+                'm2'=beta_inicial[2],
+                'm3'=beta_inicial[2],
+                'm4'=beta_inicial[2],
+                'm5'=beta_inicial[2],
+                'm6'=beta_inicial[2],
+                'm7'=beta_inicial[2],
+                'm8'=beta_inicial[2],
+                'm9'=beta_inicial[2],
+                'm10'=beta_inicial[2],
+                'm11'=beta_inicial[2],
+                'm12'=beta_inicial[2],
+                'm13'=beta_inicial[2],
+                'm14'=beta_inicial[2],
+                'm15'=beta_inicial[2],
+                'm16'=beta_inicial[2],
+                'm17'=beta_inicial[2])
+
+beta3 <- switch(funcao,
+                'logistica'=1/beta_inicial[2],
+                'Gompertz'=beta_inicial[3],
+                'm2'=beta_inicial[3],
+                'm3'=beta_inicial[3],
+                'm4'=beta_inicial[3],
+                'm5'=beta_inicial[3],
+                'm6'=beta_inicial[3],
+                'm7'=beta_inicial[3],
+                'm8'=beta_inicial[3],
+                'm9'=beta_inicial[3],
+                'm10'=beta_inicial[3],
+                'm11'=beta_inicial[3],
+                'm12'=beta_inicial[3],
+                'm13'=beta_inicial[3],
+                'm14'=beta_inicial[3],
+                'm15'=beta_inicial[3],
+                'm16'=beta_inicial[3],
+                'm17'=beta_inicial[3])
+
+beta = c(beta1,beta2,beta3)
+
+## Ajuste de las funciones aleatorias
+z<-cbind(rep(1,n),x)  
+u<-rep(1,length(ii))  
+n = length(y)
+p<-3
+sigma2<-10;  
+d11<-1; d12<-0;  d22<-1;   
+D<-matrix(c(d11,d12,d12,d22),nrow=2,byrow=T)  #valores iniciais
+xk<-c(sigma2,d11,d12,d22); 
+Sigma<-matrix(0,nrow=n,ncol=n) 
+ff = f(beta,x,funcao)
+JJ = J(beta,x,funcao)
+
+for(i in ii){ Sigma[s(i),s(i)] <- z[s(i),] %*% D %*% t(z[s(i),])+ sigma2 * Imi(m[i]) }
+SigmaInv<-qr.solve(Sigma,tol=1e-100000)
+
+for(i in ii){ u[i] <- t((y-ff)[s(i)]) %*% SigmaInv[s(i),s(i)] %*% (y-ff)[s(i)] }
+
+beta<-c(beta1,beta2,beta3)
+vetorPar = c(c(beta),sigma2,d11,d12,d22)
+
+atualiza_modelo <- updatemodel(vetorPar,y,ff,modelo)
+Wg = atualiza_modelo$Wg
+WgLinha = atualiza_modelo$WgLinha
+xi = atualiza_modelo$xy
+dg = atualiza_modelo$dg
+fg = atualiza_modelo$fg
+
+
+# Elliptical mixed nonlinear model
+contador<-0  
+
+ff = f(beta,x,funcao)
+JJ = J(beta,x,funcao)
+
+#  r<-y-f        
+
+# Iterative procedure for estimating betas, sigma2, D 
+# Fisher-scoring method
+controleWhile = 10
+while(abs(controleWhile)>1e-8){
+    
+    contador<-contador+1
+    vetorPar0 = vetorPar          
+    
+    # Fixed-effects estimation
+    incr1<-incr2<-rep(0,length(beta))
+    
+    for(i in 1:length(m)){
+        incr1<- incr1 + 4*dg[i]/m[i]*(t(JJ[s(i),])  %*% SigmaInv[s(i),s(i)] %*% JJ[s(i),])  
+        incr2<- incr2 + (-2 * Wg[i]) * t(JJ[s(i),]) %*%  SigmaInv[s(i),s(i)] %*% c(y-ff)[s(i)] 
+    }
+    
+    beta <-beta + qr.solve(incr1,tol=1e-1000) %*% incr2
+    beta1<-beta[1]; beta2<-beta[2]; beta3<-beta[3]
+    
+    ff = f(beta,x,funcao)
+    JJ = J(beta,x,funcao)
+    
+    vetorPar = c(c(beta),sigma2,d11,d12,d22)
+    
+    # Variance components estimation  
+    xkmais<- xk + qr.solve(MatrizInformacao(vetorPar, modelo), tol=1e-1000) %*% Score(vetorPar,modelo)      
+    xk<-xkmais   
+    
+    sigma2<-xk[1]; d11<-xk[2]; d12<-xk[3]; d22<-xk[4]  
+    
+    D<-matrix(c(d11,d12,d12,d22),nrow=ncol(z),byrow=T)  
+    
+    Sigma<-matrix(0,nrow=n,ncol=n)   
+    for(i in 1:(length(m))){ Sigma[s(i),s(i)]<- z[s(i),] %*% D %*% t(z[s(i),])+ sigma2 * Imi(m[i]) }
+    SigmaInv<-qr.solve(Sigma,tol=1e-1000000)
+    
+    vetorPar = c(c(beta),sigma2,d11,d12,d22) 
+    controleWhile = max(abs(1-vetorPar[which(vetorPar0!=0)]/vetorPar0[which(vetorPar0!=0)]))
+    
+    atualiza_modelo <- updatemodel(vetorPar,y,ff,modelo)
+    Wg = atualiza_modelo$Wg
+    WgLinha = atualiza_modelo$WgLinha
+    xi = atualiza_modelo$xy
+    dg = atualiza_modelo$dg
+    fg = atualiza_modelo$fg
+    
+    #  print(LogVerosElliptical(vetorPar, modelo))
+    
+}
+print(beta)  
+print(round(xk,8))
+print(t(t(Score(vetorPar,modelo))))   
+print(LogVerosElliptical(vetorPar, modelo))
+
+varBeta = qr.solve(incr1, tol=1e-100000)
+erroBeta = sqrt(diag(varBeta))                             
+zBeta = beta/erroBeta
+pBeta = 2*pnorm(-abs(zBeta))   
+
+varSigma = qr.solve(MatrizInformacao(vetorPar, modelo),tol=1e-10)
+
+erroSigma = sqrt(diag(varSigma))                             
+zSigma = c(sigma2,d11,d12,d22)/erroSigma
+pSigma = 2*pnorm(-abs(zSigma))  
+
+mAux = matrix(0,2,2)
+
+matrizSaida = matrix(0,7,5)
+matrizSaida[1:3,1] = c(t(beta))   
+matrizSaida[1:3,2] = c(t(erroBeta))
+matrizSaida[1:3, 3] = zBeta    
+matrizSaida[1:3, 4] = beta-2*erroBeta     
+matrizSaida[1:3, 5] = beta+2*erroBeta
+
+matrizSaida[4:7,1] = c(sigma2,d11,d12,d22)
+matrizSaida[4:7,2] = c(t(erroSigma))
+matrizSaida[4:7, 3] = zSigma
+matrizSaida[4:7, 4] = c(sigma2,d11,d12,d22)-2*erroSigma
+matrizSaida[4:7, 5] = c(sigma2,d11,d12,d22)+2*erroSigma
+
+dimnames(matrizSaida) = list(c("beta1", "beta2", "beta3", "sigma2","d11", "d12", "d22"), c("Estimativa","Erro","Z","LI","LS"))
+print(round(matrizSaida,6)) 
+
+AIC = -2 * LogVerosElliptical(vetorPar, modelo) + 2 * (length(c(beta)) + 1 + nrow(D)*(nrow(D)+1)/2)
+BIC = -2 * LogVerosElliptical(vetorPar, modelo) + 2 * (length(c(beta)) + 1 + nrow(D)*(nrow(D)+1)/2)*log(length(m))
+
+print(AIC);print(BIC)
+
+u<-rep(1,length(m))
+
+for(i in 1:(length(m))) {u[i]<- t(y[s(i)] - ff[s(i)])%*% SigmaInv[s(i),s(i)] %*%(y[s(i)] - ff[s(i)])}
+
+
+# Random effects prediction
+b <- matrix(0,ncol=(length(m)),nrow=2)
+
+for(i in 1:(length(m))){ b[,i] <- D %*% t(z[s(i),]) %*% SigmaInv[s(i),s(i)] %*% (y-ff)[s(i)] }
+
+# Predicting observations
+y.prev<-y
+
+for(i in 1:(length(m))) {y.prev[s(i)] <- sigma2*SigmaInv[s(i),s(i)]  %*% (ff)[s(i)] + (Imi(m[i])-sigma2*SigmaInv[s(i),s(i)]) %*% (y)[s(i)] }
+
+subject<-kronecker(1:50,rep(1,15))
+
+
+
+# Fitted models visualization      
+setTrellis()   
+
+xyplot(y.prev ~ x| ID, groups= ID, data=dados, background="white" ,
+       type="o", pch=16, cex=0.5, col=1,  xlab="Size", ylab="Acumulado Pasante",  label.curves=FALSE )
+
+# xx <- seq(0, max(x), length.out = 100)
+# ff <- beta1/(1+exp(-(xx-beta2)/beta3))
+
+xyplot(y ~ x | ID,  groups=ID, data=dados, main='Modelo Bertalanffy con efectos aleatorios',xlab = "Size", ylab = "Acumulado Pasante", pch = 16, 
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...);  # Plotando os pontos de observação
+           y.prev <- y.prev[dados$ID == unique(dados$ID)[panel.number()]]
+           llines(x, y.prev, lwd = 2, col = 1);  # Plotando as curvas preditas
+           panel.text(x = median(x)+50.2, y = median(y), labels = unique(dados$ID)[panel.number()], pos = 1, cex = 1.2);
+       })   
+
+Sigma<-matrix(0,nrow=n,ncol=n)   
+for (i in 1:(length(m))) Sigma[s(i),s(i)]<- z[s(i),] %*% D %*% t(z[s(i),])+ sigma2 * Imi(m[i])                   
+SigmaInv<-qr.solve(Sigma,tol=1e-1000000) 
+ff = f(beta,x,funcao)
+JJ = J(beta,x,funcao)
+
+# Mahalanobis distance
+
+u<-rep(1,(length(m)))
+for (i in 1:(length(m))) u[i]<-
+    switch(modelo,
+           'normal'= t(y[s(i)] - ff[s(i)])%*% SigmaInv[s(i),s(i)] %*%(y[s(i)] - ff[s(i)]),
+           't-Student' = t(y[s(i)] - ff[s(i)])%*% SigmaInv[s(i),s(i)] %*%(y[s(i)] - ff[s(i)]) / m[i]
+    )
+
+plot(u, pch=16, main = "M10 Mahalanobis distance")    
+
