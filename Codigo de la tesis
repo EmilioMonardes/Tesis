@@ -16,7 +16,6 @@ library(car) #qqPlot
 # Leer el archivo
 ruta_archivo <- file.choose()
 Hidroc <- read_excel(ruta_archivo)
-dados <- Hidroc
 names(Hidroc)
 ##################### Tabla #########################
 head(Hidroc)
@@ -115,7 +114,6 @@ set.seed(123456)
 llike.L3 <- function(param, y, SIZE) {
     beta0 <- param[1]
     beta1 <- param[2]
-    
     sigma <- param[3]
     mu <- 100/(1+ exp(-beta0*(SIZE- beta1)))
     n <- length(y)  # Define n como la longitud del vector de datos
@@ -195,13 +193,22 @@ cowplot::plot_grid(p11,p12,rel_heights = c(2,1),
                    rel_widths = c(1, 3))
 
 
+
+
 ########################## Interpolacion #############################
 
-# Lineal
 
+# Lineal
 # Logaritmica
+# Realizadas en el excel
+
 
 # Directa del modelo
+d50 <- -log(100/50-1)/1.552856 + 2.352640
+exp(d50)
+
+d80 <- -log(100/80-1)/1.552856 + 2.352640
+exp(d80)
 
 
 
@@ -245,6 +252,223 @@ ggplot(ss,aes(y=Acum..Pasante,x=SIZE,color=as.factor(ID) )) +
     geom_point() + geom_smooth(method="gam")
 
 ###########################Tabla 5.3 ##########################
+# ID 1
+HidrocID1 <-  Hidroc %>% filter(ID == "1")
+HidrocID2 <-  Hidroc %>% filter(ID == "2")
+HidrocID3 <-  Hidroc %>% filter(ID == "3")
+HidrocID4 <-  Hidroc %>% filter(ID == "4")
+HidrocID5 <-  Hidroc %>% filter(ID == "5")
+HidrocID6 <-  Hidroc %>% filter(ID == "6")
+HidrocID7 <-  Hidroc %>% filter(ID == "7")
+HidrocID8 <-  Hidroc %>% filter(ID == "8")
+HidrocID9 <-  Hidroc %>% filter(ID == "9")
+HidrocID10 <-  Hidroc %>% filter(ID == "10")
+HidrocID11 <-  Hidroc %>% filter(ID == "11")
+HidrocID12 <-  Hidroc %>% filter(ID == "12")
+HidrocID13 <-  Hidroc %>% filter(ID == "13")
+HidrocID14 <-  Hidroc %>% filter(ID == "14")
+HidrocID15 <-  Hidroc %>% filter(ID == "15")
+
+initialparams <- c(1.543927, 2.353445, 1)
+# Optimiza la log-verosimilitud (ID1)
+set.seed(0)
+resultnolinealID1 <- optim(initialparams, llike.L3, method = "SANN",
+                         y = HidrocID1$Acum..Pasante, SIZE = log(HidrocID1$SIZE))
+
+
+resultnolinealID1$par
+d50ID1 <- -log(100/50-1)/resultnolinealID1$par[1] + resultnolinealID1$par[2]
+exp(d50ID1)
+
+xid1 <- 6
+YID1 <- 100/(1+exp(-resultnolinealID1$par[1]*(xid1 -resultnolinealID1$par[2])))
+YID1
+
+# Optimiza la log-verosimilitud (ID2)
+set.seed(0)
+resultnolinealID2 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID2$Acum..Pasante, SIZE = log(HidrocID2$SIZE))
+
+
+resultnolinealID2$par
+d50ID2 <- -log(100/50-1)/resultnolinealID2$par[1] + resultnolinealID2$par[2]
+exp(d50ID2)
+
+xid2 <- 6
+YID2 <- 100/(1+exp(-resultnolinealID2$par[1]*(xid2 -resultnolinealID2$par[2])))
+YID2
+
+# Optimiza la log-verosimilitud (ID3)
+set.seed(0)
+resultnolinealID3 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID3$Acum..Pasante, SIZE = log(HidrocID3$SIZE))
+
+
+resultnolinealID3$par
+d50ID3 <- -log(100/50-1)/resultnolinealID3$par[1] + resultnolinealID3$par[2]
+exp(d50ID3)
+
+xid3 <- 6
+YID3 <- 100/(1+exp(-resultnolinealID3$par[1]*(xid3 -resultnolinealID3$par[2])))
+YID3
+
+# Optimiza la log-verosimilitud (ID4)
+set.seed(0)
+resultnolinealID4 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID4$Acum..Pasante, SIZE = log(HidrocID4$SIZE))
+
+
+resultnolinealID4$par
+d50ID4 <- -log(100/50-1)/resultnolinealID4$par[1] + resultnolinealID4$par[2]
+exp(d50ID4)
+
+xid4 <- 6
+YID4 <- 100/(1+exp(-resultnolinealID4$par[1]*(xid2 -resultnolinealID4$par[2])))
+YID4
+# Optimiza la log-verosimilitud (ID5)
+set.seed(0)
+resultnolinealID5 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID5$Acum..Pasante, SIZE = log(HidrocID5$SIZE))
+
+
+resultnolinealID5$par
+d50ID5 <- -log(100/50-1)/resultnolinealID5$par[1] + resultnolinealID5$par[2]
+exp(d50ID5)
+
+xid5 <- 6
+YID5 <- 100/(1+exp(-resultnolinealID5$par[1]*(xid2 -resultnolinealID5$par[2])))
+YID5
+# Optimiza la log-verosimilitud (ID6)
+set.seed(0)
+resultnolinealID6 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID6$Acum..Pasante, SIZE = log(HidrocID6$SIZE))
+
+
+resultnolinealID6$par
+d50ID6 <- -log(100/50-1)/resultnolinealID6$par[1] + resultnolinealID6$par[2]
+exp(d50ID6)
+
+xid6 <- 6
+YID6 <- 100/(1+exp(-resultnolinealID6$par[1]*(xid6 -resultnolinealID6$par[2])))
+YID6
+# Optimiza la log-verosimilitud (ID7)
+set.seed(0)
+resultnolinealID7 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID7$Acum..Pasante, SIZE = log(HidrocID7$SIZE))
+
+
+resultnolinealID7$par
+d50ID7 <- -log(100/50-1)/resultnolinealID7$par[1] + resultnolinealID7$par[2]
+exp(d50ID7)
+
+xid7 <- 6
+YID7 <- 100/(1+exp(-resultnolinealID7$par[1]*(xid7 -resultnolinealID7$par[2])))
+YID7
+# Optimiza la log-verosimilitud (ID8)
+set.seed(0)
+resultnolinealID8 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID8$Acum..Pasante, SIZE = log(HidrocID8$SIZE))
+
+
+resultnolinealID8$par
+d50ID8 <- -log(100/50-1)/resultnolinealID8$par[1] + resultnolinealID8$par[2]
+exp(d50ID8)
+
+xid8 <- 6
+YID8 <- 100/(1+exp(-resultnolinealID8$par[1]*(xid8 -resultnolinealID8$par[2])))
+YID8
+# Optimiza la log-verosimilitud (ID9)
+set.seed(0)
+resultnolinealID9 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID9$Acum..Pasante, SIZE = log(HidrocID9$SIZE))
+
+
+resultnolinealID9$par
+d50ID9 <- -log(100/50-1)/resultnolinealID9$par[1] + resultnolinealID9$par[2]
+exp(d50ID9)
+
+xid9 <- 6
+YID9 <- 100/(1+exp(-resultnolinealID9$par[1]*(xid9 -resultnolinealID9$par[2])))
+YID9
+# Optimiza la log-verosimilitud (ID10)
+set.seed(0)
+resultnolinealID10 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID10$Acum..Pasante, SIZE = log(HidrocID10$SIZE))
+
+
+resultnolinealID10$par
+d50ID10 <- -log(100/50-1)/resultnolinealID10$par[1] + resultnolinealID10$par[2]
+exp(d50ID10)
+
+xid10 <- 6
+YID10 <- 100/(1+exp(-resultnolinealID10$par[1]*(xid10 -resultnolinealID10$par[2])))
+YID10
+# Optimiza la log-verosimilitud (ID11)
+set.seed(0)
+resultnolinealID11 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID11$Acum..Pasante, SIZE = log(HidrocID11$SIZE))
+
+
+resultnolinealID11$par
+d50ID11 <- -log(100/50-1)/resultnolinealID11$par[1] + resultnolinealID11$par[2]
+exp(d50ID11)
+
+xid11 <- 6
+YID11 <- 100/(1+exp(-resultnolinealID11$par[1]*(xid11 -resultnolinealID11$par[2])))
+YID11
+# Optimiza la log-verosimilitud (ID12)
+set.seed(0)
+resultnolinealID12 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID12$Acum..Pasante, SIZE = log(HidrocID12$SIZE))
+
+
+resultnolinealID12$par
+d50ID12 <- -log(100/50-1)/resultnolinealID12$par[1] + resultnolinealID12$par[2]
+exp(d50ID12)
+
+xid12 <- 6
+YID12 <- 100/(1+exp(-resultnolinealID12$par[1]*(xid12 -resultnolinealID12$par[2])))
+YID12
+# Optimiza la log-verosimilitud (ID13)
+set.seed(0)
+resultnolinealID13 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID13$Acum..Pasante, SIZE = log(HidrocID13$SIZE))
+
+
+resultnolinealID13$par
+d50ID13 <- -log(100/50-1)/resultnolinealID13$par[1] + resultnolinealID13$par[2]
+exp(d50ID13)
+
+xid13 <- 6
+YID13 <- 100/(1+exp(-resultnolinealID13$par[1]*(xid13 -resultnolinealID13$par[2])))
+YID13
+# Optimiza la log-verosimilitud (ID14)
+set.seed(0)
+resultnolinealID14 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID14$Acum..Pasante, SIZE = log(HidrocID14$SIZE))
+
+
+resultnolinealID14$par
+d50ID14 <- -log(100/50-1)/resultnolinealID14$par[1] + resultnolinealID14$par[2]
+exp(d50ID14)
+
+xid14 <- 6
+YID14 <- 100/(1+exp(-resultnolinealID14$par[1]*(xid14 -resultnolinealID14$par[2])))
+YID14
+# Optimiza la log-verosimilitud (ID15)
+set.seed(0)
+resultnolinealID15 <- optim(initialparams, llike.L3, method = "SANN",
+                           y = HidrocID15$Acum..Pasante, SIZE = log(HidrocID15$SIZE))
+
+
+resultnolinealID15$par
+d50ID15 <- -log(100/50-1)/resultnolinealID15$par[1] + resultnolinealID15$par[2]
+exp(d50ID15)
+
+xid15 <- 6
+YID15 <- 100/(1+exp(-resultnolinealID15$par[1]*(xid15 -resultnolinealID15$par[2])))
+YID15
+
 
 
 
