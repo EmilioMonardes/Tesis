@@ -1426,6 +1426,9 @@ AICC_gaudin_schuhmann
 AICC_rossin_rammler
 
 ##################### Modelos mixtos #################
+Se debe tener en cuenta que ya se cargo dados previamente 
+y <- dados$Acum..Pasante
+x <- dados$SIZE
 
 ## Despues de ejecutar el modelo de inferencia clasica en la seccicon inferencia clasica
 
