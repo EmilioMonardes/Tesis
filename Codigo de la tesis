@@ -1429,7 +1429,8 @@ AICC_rossin_rammler
 Se debe tener en cuenta que ya se cargo dados previamente 
 y <- dados$Acum..Pasante
 x <- dados$SIZE
-
+dados$Y <- y
+dados$X <- x
 ## Despues de ejecutar el modelo de inferencia clasica en la seccicon inferencia clasica
 
 AIC(modelo_inicial);BIC(modelo_inicial)
